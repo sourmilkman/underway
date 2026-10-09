@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e1619">
+<title>Underway</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0e1619; --panel:#16232a; --panel-2:#1d2d34; --rule:#2b3d44;
+  --porcelain:#ece6d6; --mist:#93a3a6; --brass:#c8a15a; --brass-deep:#9b7a3c;
+  --font:"Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--porcelain);font-family:var(--font);overflow:hidden;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* ---------- map ---------- */
+#map{position:fixed;inset:0;touch-action:none;display:block;width:100%;height:100%;background:var(--ink)}
+#map .ln path{fill:none;stroke-linecap:round;stroke-linejoin:round}
+#map.dim .ln{opacity:.16}
+#map.dim .st,#map.dim .lb{opacity:.28}
+#map .st circle{stroke:var(--ink)}
+#map .st .i{fill:var(--porcelain)}
+#map .st .r{fill:var(--porcelain)}
+#map .lb text{fill:var(--porcelain);font-family:var(--font);font-weight:500;paint-order:stroke;stroke:var(--ink);stroke-width:.09px;stroke-linejoin:round}
+#map .lb text.i{font-weight:700}
+#map .lb text.m{display:none}
+#map.zl1 .lb text.m{display:block}
+#map .lb text.i{display:none}
+#map.zl0 .lb text.i,#map.zl1 .lb text.i{display:block}
+#map .sel-o{fill:none;stroke:var(--brass);stroke-width:.14}
+#map .sel-d{fill:none;stroke:var(--porcelain);stroke-width:.14;stroke-dasharray:.18 .12}
+#map .route path{fill:none;stroke-linecap:round;stroke-linejoin:round}
+#map .route circle{fill:var(--porcelain);stroke:var(--ink)}
+
+/* ---------- search card ---------- */
+.top{position:fixed;left:12px;right:12px;top:calc(10px + var(--safe-top));display:flex;gap:8px;align-items:flex-start;z-index:10}
+.search{flex:1;background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:4px 4px 4px 0;display:grid;grid-template-columns:28px 1fr 40px;align-items:center;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.search .dot{justify-self:center;width:10px;height:10px;border-radius:50%}
+.search .dot.o{background:var(--brass)}
+.search .dot.d{border:2px solid var(--porcelain)}
+.search .stem{grid-column:1;justify-self:center;width:2px;height:14px;background:var(--rule);margin:-6px 0}
+.search input{width:100%;background:transparent;border:0;color:var(--porcelain);font:500 16px/1 var(--font);padding:12px 6px 12px 2px;outline:none}
+.search input::placeholder{color:var(--mist)}
+.search .sep{grid-column:2;height:1px;background:var(--rule);margin-right:6px}
+.swap{grid-column:3;grid-row:1 / span 3;width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:var(--mist)}
+.swap:active{background:var(--panel-2)}
+.iconbtn{width:46px;height:46px;border-radius:14px;background:var(--panel);border:1px solid var(--rule);display:grid;place-items:center;color:var(--porcelain);box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.clear{position:absolute;right:46px;width:30px;height:30px;display:none;place-items:center;color:var(--mist)}
+
+/* suggestions */
+.suggest{position:fixed;left:12px;right:12px;top:calc(122px + var(--safe-top));max-height:52vh;overflow:auto;background:var(--panel);border:1px solid var(--rule);border-radius:16px;z-index:11;display:none;box-shadow:0 14px 34px rgba(0,0,0,.45)}
+.suggest.on{display:block}
+.suggest button{display:flex;width:100%;text-align:left;padding:12px 14px;gap:10px;align-items:center;border-bottom:1px solid var(--rule)}
+.suggest button:last-child{border-bottom:0}
+.suggest button[aria-selected=true],.suggest button:active{background:var(--panel-2)}
+.suggest .nm{flex:1;font-weight:500}
+.chips{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;max-width:45%}
+.chip{width:14px;height:6px;border-radius:3px}
+.suggest .hint{padding:12px 14px;color:var(--mist);font-size:14px}
+
+/* zoom buttons */
+.zoom{position:fixed;right:12px;bottom:calc(20px + var(--safe-bot));display:flex;flex-direction:column;gap:8px;z-index:5;transition:transform .25s}
+body.sheet-open .zoom{transform:translateY(-40vh);opacity:0;pointer-events:none}
+
+/* popover */
+.pop{position:fixed;z-index:12;background:var(--panel);border:1px solid var(--rule);border-radius:14px;padding:12px;min-width:210px;max-width:min(300px,calc(100vw - 24px));box-shadow:0 14px 34px rgba(0,0,0,.5);display:none}
+.pop.on{display:block}
+.pop h3{margin:0 0 6px;font-size:17px;font-weight:600;line-height:1.25}
+.pop .lines{display:flex;flex-wrap:wrap;gap:4px 10px;margin-bottom:12px;font-size:13px;color:var(--mist)}
+.pop .lines span{display:inline-flex;align-items:center;gap:5px}
+.pop .row{display:flex;gap:8px}
+.btn{flex:1;padding:11px 12px;border-radius:11px;font-weight:600;font-size:15px;background:var(--panel-2);border:1px solid var(--rule);text-align:center}
+.btn.primary{background:var(--brass);color:#1b1408;border-color:var(--brass)}
+.btn:active{filter:brightness(1.1)}
+
+/* ---------- bottom sheet ---------- */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--rule);border-radius:22px 22px 0 0;box-shadow:0 -18px 40px rgba(0,0,0,.45);transform:translateY(105%);transition:transform .32s cubic-bezier(.2,.8,.2,1);max-height:82vh;display:flex;flex-direction:column;padding-bottom:var(--safe-bot)}
+.sheet.on{transform:none}
+.sheet.tall{max-height:calc(100vh - 70px - var(--safe-top))}
+.sheet.peek{max-height:none}
+.sheet.peek .body{display:none}
+.sheet.peek header h2::after{content:"Tap to show details";display:block;font-size:13px;font-weight:500;color:var(--mist);margin-top:2px}
+.grab{cursor:pointer}
+.mapbtn{display:block;width:100%;margin-top:14px}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--rule);margin:10px auto 4px;flex:none}
+.sheet header{display:flex;align-items:center;gap:10px;padding:6px 16px 10px;flex:none}
+.sheet header h2{margin:0;font-size:18px;font-weight:600;flex:1;line-height:1.25}
+.sheet .body{overflow:auto;padding:0 16px 18px;-webkit-overflow-scrolling:touch}
+.sub{color:var(--mist);font-size:14px}
+
+/* route options */
+.opt{display:block;width:100%;text-align:left;border:1px solid var(--rule);background:var(--ink);border-radius:16px;padding:14px;margin-bottom:10px}
+.opt:active{border-color:var(--brass)}
+.opt .head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.opt .mins{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.opt .mins small{font-size:15px;font-weight:600;margin-left:3px;color:var(--mist);letter-spacing:0}
+.opt .arr{margin-left:auto;color:var(--mist);font-size:14px}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;margin-bottom:10px}
+.bar i{display:block;height:100%}
+.bar i.w{background:repeating-linear-gradient(90deg,var(--mist) 0 3px,transparent 3px 6px);opacity:.6}
+.opt .via{font-size:14px;color:var(--porcelain);line-height:1.45}
+.opt .via b{font-weight:600}
+.opt .meta{font-size:13px;color:var(--mist);margin-top:4px}
+.best{font-size:12px;color:var(--brass);font-weight:600}
+
+/* journey plan strip */
+.plan{position:relative;padding:4px 0 6px}
+.stop{display:grid;grid-template-columns:52px 1fr;min-height:30px;position:relative}
+.stop .rail{position:relative}
+.stop .rail::before{content:"";position:absolute;left:21px;width:10px;top:0;bottom:0;background:var(--c,transparent)}
+.stop.first .rail::before{top:50%}
+.stop.last .rail::before{bottom:50%}
+.stop .knob{position:absolute;left:26px;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:var(--porcelain);border:3px solid var(--ink)}
+.stop.big .knob{width:22px;height:22px;border-width:4px}
+.stop.o .knob{background:var(--brass)}
+.stop .txt{padding:6px 0;align-self:center}
+.stop.big .txt{font-size:18px;font-weight:600;padding:12px 0}
+.stop.small .txt{font-size:14px;color:var(--mist);padding:3px 0}
+.stop.small .knob{width:8px;height:8px;border:0;background:var(--ink)}
+.legcard{display:grid;grid-template-columns:52px 1fr;position:relative}
+.legcard .rail::before{content:"";position:absolute;left:21px;width:10px;top:0;bottom:0;background:var(--c)}
+.legcard .rail{position:relative}
+.legcard .info{padding:6px 0 10px}
+.legcard .lname{display:inline-block;font-weight:700;font-size:15px;padding:3px 9px;border-radius:6px;background:var(--c);color:var(--fg,#fff)}
+.legcard .tw{margin-top:6px;font-size:15px}
+.legcard .tw b{font-weight:600}
+.legcard .cnt{margin-top:3px;font-size:14px;color:var(--mist)}
+.toggle{margin-top:6px;font-size:14px;color:var(--brass);font-weight:600}
+.walkcard{display:grid;grid-template-columns:52px 1fr;min-height:46px}
+.walkcard .rail{position:relative}
+.walkcard .rail::before{content:"";position:absolute;left:24px;width:4px;top:0;bottom:0;background:repeating-linear-gradient(180deg,var(--mist) 0 4px,transparent 4px 9px)}
+.walkcard .info{align-self:center;font-size:14px;color:var(--mist);padding:8px 0}
+.note{margin-top:14px;font-size:13px;color:var(--mist);line-height:1.5;border-top:1px solid var(--rule);padding-top:12px}
+.summary{display:flex;align-items:baseline;gap:8px;margin:2px 0 14px}
+.summary .mins{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.summary .arr{color:var(--mist);font-size:15px}
+
+/* ---------- overlays ---------- */
+.overlay{position:fixed;inset:0;z-index:40;background:var(--ink);display:none;flex-direction:column}
+.overlay.on{display:flex}
+.overlay .bar-top{display:flex;align-items:center;gap:10px;padding:calc(10px + var(--safe-top)) 12px 10px;border-bottom:1px solid var(--rule);background:var(--panel)}
+.overlay .bar-top h2{margin:0;font-size:18px;font-weight:600;flex:1}
+.refwrap{flex:1;position:relative;overflow:hidden;touch-action:none}
+.refwrap canvas,.refwrap img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none}
+.empty{margin:auto;max-width:330px;text-align:center;padding:24px;line-height:1.5}
+.empty h3{font-size:20px;margin:0 0 8px;font-weight:600}
+.empty p{color:var(--mist);margin:0 0 18px;font-size:15px}
+.about{padding:18px 18px 40px;overflow:auto;line-height:1.55;font-size:15px;max-width:640px}
+.about h3{font-size:16px;margin:22px 0 6px;font-weight:600}
+.about p{margin:0 0 10px;color:#d6d0c1}
+.about .k{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 14px;margin-top:8px}
+.about .k span{display:flex;align-items:center;gap:8px;font-size:14px}
+.about .k i{width:22px;height:7px;border-radius:4px;flex:none}
+.menu{position:fixed;right:12px;top:calc(62px + var(--safe-top));z-index:30;background:var(--panel);border:1px solid var(--rule);border-radius:14px;display:none;min-width:200px;box-shadow:0 14px 34px rgba(0,0,0,.5);overflow:hidden}
+.menu.on{display:block}
+.menu button{display:block;width:100%;text-align:left;padding:14px 16px;border-bottom:1px solid var(--rule);font-weight:500}
+.menu button:last-child{border-bottom:0}
+.toast{position:fixed;left:50%;bottom:calc(24px + var(--safe-bot));transform:translate(-50%,40px);opacity:0;background:var(--porcelain);color:var(--ink);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;z-index:60;transition:.25s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (min-width:720px){
+  .top{right:auto;width:420px}
+  .suggest{right:auto;width:420px}
+  .sheet{left:12px;right:auto;width:420px;bottom:12px;border-radius:22px;border:1px solid var(--rule)}
+  body.sheet-open .zoom{transform:none;opacity:1;pointer-events:auto}
+}
+</style>
+</head>
+<body>
+<svg id="map" aria-label="Rail map of London"><g id="vp"></g></svg>
+
+<div class="top">
+  <div class="search" role="search">
+    <span class="dot o" aria-hidden="true"></span>
+    <input id="from" placeholder="Start station" autocomplete="off" spellcheck="false" aria-label="Start station">
+    <button class="swap" id="swap" aria-label="Swap start and destination">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v15M3.5 7.5 7 4l3.5 3.5M17 20V5M13.5 16.5 17 20l3.5-3.5"/></svg>
+    </button>
+    <span class="sep"></span>
+    <span class="dot d" aria-hidden="true"></span>
+    <input id="to" placeholder="Destination" autocomplete="off" spellcheck="false" aria-label="Destination">
+  </div>
+  <button class="iconbtn" id="menuBtn" aria-label="Menu" aria-haspopup="true">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+</div>
+<div class="menu" id="menu">
+  <button id="openRef">Your downloaded map</button>
+  <button id="openAbout">About this app</button>
+</div>
+<div class="suggest" id="suggest" role="listbox"></div>
+
+<div class="zoom">
+  <button class="iconbtn" id="zin" aria-label="Zoom in"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="iconbtn" id="zout" aria-label="Zoom out"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+  <button class="iconbtn" id="zfit" aria-label="Show whole map"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+</div>
+
+<div class="pop" id="pop" role="dialog" aria-modal="false"></div>
+
+<section class="sheet" id="sheet" aria-live="polite">
+  <div class="grab" aria-hidden="true"></div>
+  <header><button class="iconbtn" id="back" aria-label="Back to routes" style="display:none;width:38px;height:38px;box-shadow:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2 id="sheetTitle"></h2><button class="iconbtn" id="closeSheet" aria-label="Close" style="width:38px;height:38px;box-shadow:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+  <div class="body" id="sheetBody"></div>
+</section>
+
+<section class="overlay" id="ref" aria-label="Your downloaded map">
+  <div class="bar-top"><button class="iconbtn" id="refClose" aria-label="Back to planner" style="width:40px;height:40px;box-shadow:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Your downloaded map</h2><button class="btn" id="refReplace" style="flex:none;display:none">Replace</button></div>
+  <div class="refwrap" id="refWrap"></div>
+  <input type="file" id="refFile" accept="application/pdf,image/*" hidden>
+</section>
+
+<section class="overlay" id="aboutOv" aria-label="About">
+  <div class="bar-top"><button class="iconbtn" id="aboutClose" aria-label="Back to planner" style="width:40px;height:40px;box-shadow:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><h2>About</h2></div>
+  <div class="about" id="aboutBody"></div>
+</section>
+<div class="toast" id="toast"></div>
+
+<script>
+const NET = /*NET*/null;
+const GEOM = /*GEOM*/null;
+/*ROUTER*/
+</script>
+<script>
+(() => {
+'use strict';
+const S = NET.stations, LINES = NET.lines, R = new Router(NET);
+const $ = id => document.getElementById(id);
+const svg = $('map'), vp = $('vp'), NS = 'http://www.w3.org/2000/svg';
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const lum = hex => { const n = parseInt(hex.slice(1), 16); const c = [n >> 16, n >> 8 & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+const fgOn = hex => lum(hex) > .35 ? '#10181b' : '#ffffff';
+// Northern line is black in the data; lift it so it reads on the dark ground
+const lineColour = id => id === 'northern' ? '#e9e4d8' : LINES[id].colour;
+const lineName = id => { const n = LINES[id].name; return /line$|DLR|Trams/.test(n) ? n : n + ' line'; };
+
+/* ---------- draw map ---------- */
+const lnG = document.createElementNS(NS, 'g'); lnG.setAttribute('class', 'ln');
+const order = ['tram','dlr','liberty','lioness','suffragette','weaver','windrush','mildmay','waterloo-city','victoria','bakerloo','northern','jubilee','metropolitan','hammersmith-city','circle','district','piccadilly','central','elizabeth'];
+for (const id of order) {
+  if (!GEOM.paths[id]) continue;
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('d', GEOM.paths[id]); p.setAttribute('stroke', lineColour(id));
+  p.setAttribute('stroke-width', GEOM.lw * (id === 'elizabeth' ? 1 : .92));
+  if (LINES[id].mode === 'overground') { p.setAttribute('stroke-width', GEOM.lw * .92); }
+  lnG.appendChild(p);
+}
+const routeG = document.createElementNS(NS, 'g'); routeG.setAttribute('class', 'route');
+const stG = document.createElementNS(NS, 'g'); stG.setAttribute('class', 'st');
+const lbG = document.createElementNS(NS, 'g'); lbG.setAttribute('class', 'lb');
+const selG = document.createElementNS(NS, 'g');
+const FS = GEOM.fs;
+GEOM.markers.forEach(([x, y, r, inter], i) => {
+  const c = document.createElementNS(NS, 'circle');
+  c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', r);
+  c.setAttribute('class', inter ? 'i' : 'r'); c.setAttribute('stroke-width', inter ? .07 : .05);
+  stG.appendChild(c);
+  const t = document.createElementNS(NS, 'text'); t.textContent = S[i].n;
+  t.setAttribute('font-size', FS); t.setAttribute('class', inter ? 'i' : 'm');
+  const g = r + .12, h = FS, pos = GEOM.labels[i];
+  let tx = x, ty = y, anchor = 'start', rot = 0;
+  switch (pos) {
+    case 'E': tx = x + g; ty = y + h * .35; break;
+    case 'W': tx = x - g; ty = y + h * .35; anchor = 'end'; break;
+    case 'N': ty = y - g - h * .22; anchor = 'middle'; break;
+    case 'S': ty = y + g + h * .8; anchor = 'middle'; break;
+    case 'NE': tx = x + g * .8; ty = y - g * .8 - h * .2; break;
+    case 'SE': tx = x + g * .8; ty = y + g * .8 + h * .8; break;
+    case 'NW': tx = x - g * .8; ty = y - g * .8 - h * .2; anchor = 'end'; break;
+    case 'SW': tx = x - g * .8; ty = y + g * .8 + h * .8; anchor = 'end'; break;
+    case 'R1': tx = x + g; ty = y + h * .35; rot = -45; break;
+    case 'R2': tx = x + g; ty = y + h * .35; rot = 45; break;
+    case 'R3': tx = x - g; ty = y + h * .35; rot = 45; anchor = 'end'; break;
+    case 'R4': tx = x - g; ty = y + h * .35; rot = -45; anchor = 'end'; break;
+  }
+  t.setAttribute('x', tx); t.setAttribute('y', ty); t.setAttribute('text-anchor', anchor);
+  if (rot) t.setAttribute('transform', `rotate(${rot} ${x} ${y})`);
+  lbG.appendChild(t);
+});
+vp.append(lnG, stG, routeG, lbG, selG);
+
+/* ---------- pan & zoom ---------- */
+const [MW, MH] = GEOM.size;
+let view = { x: 0, y: 0, k: 1 };
+let minK = 1, maxK = 1;
+const apply = () => {
+  vp.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.k})`);
+  const px = view.k * FS;
+  svg.classList.toggle('zl1', px >= 9.5);
+  svg.classList.toggle('zl0', px >= 6.5);
+};
+const fit = (bounds, pad = 30, animate = true) => {
+  const W = innerWidth, H = innerHeight;
+  const top = 128, bottom = document.body.classList.contains('sheet-open') ? sheet.offsetHeight + 10 : 20;
+  const [x0, y0, x1, y1] = bounds;
+  const k = Math.min((W - pad * 2) / (x1 - x0), (H - top - bottom - pad * 2) / (y1 - y0), maxK);
+  const target = { k, x: W / 2 - (x0 + x1) / 2 * k, y: top + (H - top - bottom) / 2 - (y0 + y1) / 2 * k };
+  animateTo(target, animate);
+};
+let anim = 0;
+const animateTo = (t, animate = true) => {
+  cancelAnimationFrame(anim);
+  if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) { view = t; apply(); return; }
+  const s = { ...view }, t0 = performance.now(), D = 380;
+  const step = now => { const u = Math.min(1, (now - t0) / D), e = 1 - (1 - u) ** 3;
+    view = { x: s.x + (t.x - s.x) * e, y: s.y + (t.y - s.y) * e, k: s.k + (t.k - s.k) * e }; apply();
+    if (u < 1) anim = requestAnimationFrame(step); };
+  anim = requestAnimationFrame(step);
+};
+const setLimits = () => { minK = Math.min(innerWidth / (MW + 4), innerHeight / (MH + 4)) * .8; maxK = 120; };
+setLimits();
+const zoomAt = (cx, cy, f) => {
+  const k = Math.max(minK, Math.min(maxK, view.k * f)); f = k / view.k;
+  view = { k, x: cx - (cx - view.x) * f, y: cy - (cy - view.y) * f }; apply();
+};
+const pts = new Map(); let moved = 0, last = null, pinch = null;
+svg.addEventListener('pointerdown', e => { svg.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = 0; last = [e.clientX, e.clientY]; cancelAnimationFrame(anim); if (pts.size === 2) pinch = null; });
+svg.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  const prevP = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pts.size === 1) { const dx = e.clientX - prevP[0], dy = e.clientY - prevP[1]; moved += Math.abs(dx) + Math.abs(dy); view.x += dx; view.y += dy; apply(); }
+  else if (pts.size === 2) {
+    const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]), c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (pinch) { view.x += c[0] - pinch.c[0]; view.y += c[1] - pinch.c[1]; zoomAt(c[0], c[1], d / pinch.d); }
+    pinch = { d, c }; moved += 10;
+  }
+});
+const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+svg.addEventListener('pointerup', e => { const wasTap = pts.size === 1 && moved < 8; up(e); if (wasTap) tapAt(e.clientX, e.clientY); });
+svg.addEventListener('pointercancel', up);
+svg.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * .0016)); }, { passive: false });
+let lastTap = 0;
+$('zin').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1.6);
+$('zout').onclick = () => zoomAt(innerWidth / 2, innerHeight / 2, 1 / 1.6);
+$('zfit').onclick = () => fit([0, 0, MW, MH], 16);
+addEventListener('resize', () => { setLimits(); });
+
+/* ---------- station picking ---------- */
+let origin = null, dest = null;
+const toMap = (cx, cy) => [(cx - view.x) / view.k, (cy - view.y) / view.k];
+function tapAt(cx, cy) {
+  hideSuggest();
+  const [mx, my] = toMap(cx, cy);
+  let best = -1, bd = Infinity;
+  GEOM.markers.forEach(([x, y], i) => { const d = Math.hypot(x - mx, y - my); if (d < bd) { bd = d; best = i; } });
+  const tol = Math.max(.5, 24 / view.k);
+  if (best >= 0 && bd <= tol) showPop(best); else hidePop();
+}
+const pop = $('pop');
+function showPop(i) {
+  const [x, y] = GEOM.markers[i];
+  const sx = view.x + x * view.k, sy = view.y + y * view.k;
+  const ls = S[i].l.map(l => `<span><i class="chip" style="background:${lineColour(l)}"></i>${esc(lineName(l))}</span>`).join('');
+  pop.innerHTML = `<h3>${esc(S[i].n)}</h3><div class="lines">${ls}</div><div class="row"><button class="btn primary" data-a="o">Start here</button><button class="btn" data-a="d">Go here</button></div>`;
+  pop.classList.add('on');
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let left = Math.min(innerWidth - w - 12, Math.max(12, sx - w / 2));
+  let top = sy - h - 18; if (top < 130) top = sy + 18;
+  pop.style.left = left + 'px'; pop.style.top = Math.min(innerHeight - h - 12, top) + 'px';
+  pop.querySelector('[data-a=o]').onclick = () => { setOrigin(i); hidePop(); };
+  pop.querySelector('[data-a=d]').onclick = () => { setDest(i); hidePop(); };
+}
+const hidePop = () => pop.classList.remove('on');
+
+function marker(i, cls) {
+  const [x, y, r] = GEOM.markers[i];
+  const c = document.createElementNS(NS, 'circle');
+  c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', r + .2); c.setAttribute('class', cls);
+  return c;
+}
+function drawSel() {
+  selG.innerHTML = '';
+  if (origin != null) selG.appendChild(marker(origin, 'sel-o'));
+  if (dest != null) selG.appendChild(marker(dest, 'sel-d'));
+}
+const fromIn = $('from'), toIn = $('to');
+function setOrigin(i) { origin = i; fromIn.value = i == null ? '' : S[i].n; drawSel(); remember(i); afterPick(); }
+function setDest(i) { dest = i; toIn.value = i == null ? '' : S[i].n; drawSel(); remember(i); afterPick(); }
+function afterPick() {
+  clearRoute();
+  if (origin != null && dest != null) {
+    if (origin === dest) { toast('Start and destination are the same station'); closeSheet(); return; }
+    showOptions();
+  } else if (origin != null || dest != null) {
+    const i = origin != null ? origin : dest; const [x, y] = GEOM.markers[i];
+    if (view.k * FS < 9.5) animateTo({ k: 10 / FS * 1.1, x: innerWidth / 2 - x * 10 / FS * 1.1, y: innerHeight / 2 - y * 10 / FS * 1.1 });
+  }
+}
+$('swap').onclick = () => { const o = origin; origin = dest; dest = o; fromIn.value = origin == null ? '' : S[origin].n; toIn.value = dest == null ? '' : S[dest].n; drawSel(); afterPick(); };
+
+/* ---------- search ---------- */
+const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/&/g, 'and').replace(/\bst\.?\b/g, 'st').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+const idx = S.map((s, i) => ({ i, n: norm(s.n), words: norm(s.n).split(' ') }));
+const sug = $('suggest'); let activeInput = null, sugList = [], sugSel = -1;
+const RECENT_KEY = 'underway.recent';
+const recent = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; } };
+function remember(i) { if (i == null) return; try { const r = recent().filter(x => x !== i); r.unshift(i); localStorage.setItem(RECENT_KEY, JSON.stringify(r.slice(0, 6))); } catch {} }
+function search(q) {
+  q = norm(q); if (!q) return [];
+  const res = [];
+  for (const s of idx) {
+    let score = -1;
+    if (s.n.startsWith(q)) score = 0;
+    else if (s.words.some(w => w.startsWith(q))) score = 1;
+    else if (s.n.includes(q)) score = 2;
+    else if (q.length > 2 && s.n.replace(/ /g, '').includes(q.replace(/ /g, ''))) score = 3;
+    if (score >= 0) res.push([score, s.n.length, s.i]);
+  }
+  return res.sort((a, b) => a[0] - b[0] || S[b[2]].l.length - S[a[2]].l.length || a[1] - b[1]).slice(0, 8).map(r => r[2]);
+}
+function renderSuggest(list, title) {
+  sugList = list; sugSel = -1;
+  if (!list.length) { sug.innerHTML = `<div class="hint">${title || 'No station with that name. Check the spelling, or tap the station on the map.'}</div>`; sug.classList.add('on'); return; }
+  sug.innerHTML = (title ? `<div class="hint">${title}</div>` : '') + list.map(i => `<button role="option" data-i="${i}"><span class="nm">${esc(S[i].n)}</span><span class="chips">${S[i].l.map(l => `<i class="chip" style="background:${lineColour(l)}"></i>`).join('')}</span></button>`).join('');
+  sug.classList.add('on');
+  sug.querySelectorAll('button').forEach(b => b.onclick = () => choose(+b.dataset.i));
+}
+function choose(i) { if (activeInput === fromIn) setOrigin(i); else setDest(i); hideSuggest(); activeInput.blur(); if (activeInput === fromIn && dest == null) toIn.focus(); }
+const hideSuggest = () => sug.classList.remove('on');
+for (const inp of [fromIn, toIn]) {
+  inp.addEventListener('focus', () => { activeInput = inp; hidePop(); inp.select(); const r = recent().filter(i => i !== (inp === fromIn ? dest : origin)); if (!inp.value && r.length) renderSuggest(r, 'Recent'); else if (inp.value) renderSuggest(search(inp.value)); });
+  inp.addEventListener('input', () => { if (!inp.value.trim()) { hideSuggest(); if (inp === fromIn) { origin = null; } else { dest = null; } drawSel(); clearRoute(); closeSheet(); return; } renderSuggest(search(inp.value)); });
+  inp.addEventListener('keydown', e => {
+    const bs = [...sug.querySelectorAll('button')];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (!bs.length) return; sugSel = (sugSel + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length; bs.forEach((b, k) => b.setAttribute('aria-selected', k === sugSel)); }
+    if (e.key === 'Enter') { e.preventDefault(); const i = sugSel >= 0 ? sugList[sugSel] : sugList[0]; if (i != null) choose(i); }
+    if (e.key === 'Escape') { hideSuggest(); inp.blur(); }
+  });
+  inp.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== fromIn && document.activeElement !== toIn) { hideSuggest(); fromIn.value = origin == null ? '' : S[origin].n; toIn.value = dest == null ? '' : S[dest].n; } }, 180));
+}
+
+/* ---------- routes ---------- */
+const sheet = $('sheet'), sheetBody = $('sheetBody'), sheetTitle = $('sheetTitle');
+let options = [];
+const clock = mins => { const d = new Date(Date.now() + mins * 60000); return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); };
+function openSheet(tall) { sheet.classList.add('on'); sheet.classList.remove('peek'); sheet.classList.toggle('tall', !!tall); document.body.classList.add('sheet-open'); }
+let current = null;
+function peek(on) { sheet.classList.toggle('peek', on); if (current) drawRoute(current, true); }
+document.querySelector('.grab').onclick = () => peek(!sheet.classList.contains('peek'));
+$('sheetTitle').onclick = () => { if (sheet.classList.contains('peek')) peek(false); };
+function closeSheet() { sheet.classList.remove('on'); document.body.classList.remove('sheet-open'); }
+$('closeSheet').onclick = () => { closeSheet(); clearRoute(); };
+function legBar(j) {
+  return j.legs.map(l => {
+    if (l.type === 'ride') return `<i style="flex:${l.mins + l.wait};background:${lineColour(l.line)}"></i>`;
+    if (l.type === 'walk') return `<i class="w" style="flex:${l.mins}"></i>`;
+    return '';
+  }).join('');
+}
+function showOptions() {
+  options = R.routes(origin, dest, 3);
+  $('back').style.display = 'none';
+  sheetTitle.textContent = `${S[origin].n} to ${S[dest].n}`;
+  if (!options.length) { sheetBody.innerHTML = `<p class="sub">No route found between these stations.</p>`; openSheet(); return; }
+  sheetBody.innerHTML = options.map((j, k) => {
+    const rides = j.legs.filter(l => l.type === 'ride');
+    const via = rides.map(r => `<b>${esc(lineName(r.line))}</b>`).join(', then ');
+    const walks = j.legs.filter(l => l.type === 'walk').length;
+    const ch = j.changes === 0 ? 'No changes' : j.changes === 1 ? '1 change' : `${j.changes} changes`;
+    return `<button class="opt" data-k="${k}"><div class="head"><span class="mins">${j.total}<small>min</small></span>${k === 0 ? '<span class="best">Quickest</span>' : ''}<span class="arr">arrive ~${clock(j.total)}</span></div><div class="bar">${legBar(j)}</div><div class="via">${via || 'Walk'}</div><div class="meta">${ch}${walks ? ` · includes a short walk` : ''}</div></button>`;
+  }).join('') + `<p class="note">Times are estimates from typical journey times, including average waits. They don't include delays or closures.</p>`;
+  sheetBody.querySelectorAll('.opt').forEach(b => b.onclick = () => showPlan(options[+b.dataset.k]));
+  current = options[0];
+  openSheet();
+  requestAnimationFrame(() => drawRoute(options[0], true));
+  sheetBody.scrollTop = 0;
+}
+$('back').onclick = showOptions;
+
+function stopRow(i, cls, colour, extra = '') {
+  return `<div class="stop ${cls}" style="--c:${colour}"><div class="rail"><span class="knob"></span></div><div class="txt">${esc(S[i].n)}${extra}</div></div>`;
+}
+function showPlan(j) {
+  $('back').style.display = '';
+  sheetTitle.textContent = 'Journey plan';
+  let h = `<div class="summary"><span class="mins">${j.total} min</span><span class="arr">leave now, arrive ~${clock(j.total)}</span></div><div class="plan">`;
+  const legs = j.legs;
+  legs.forEach((l, k) => {
+    if (l.type === 'ride') {
+      const col = lineColour(l.line), fg = fgOn(col);
+      const isFirst = !legs.slice(0, k).some(x => x.type === 'ride') && !legs.slice(0, k).some(x => x.type === 'walk');
+      h += stopRow(l.from, 'big' + (k === 0 ? ' first o' : ''), col);
+      const tw = l.towards.map(t => esc(S[t].n)).join(' or ');
+      const mid = l.stops.slice(1, -1);
+      h += `<div class="legcard" style="--c:${col};--fg:${fg}"><div class="rail"></div><div class="info"><span class="lname">${esc(lineName(l.line))}</span><div class="tw">towards <b>${tw}</b></div><div class="cnt">${l.nStops} ${l.nStops === 1 ? 'stop' : 'stops'}, about ${Math.max(1, Math.round(l.mins))} min</div>${mid.length ? `<button class="toggle" data-k="${k}" aria-expanded="false">Show ${mid.length} ${mid.length === 1 ? 'stop' : 'stops'} on the way</button>` : ''}</div></div>`;
+      if (mid.length) h += `<div class="mids" id="mid${k}" hidden>${mid.map(i => stopRow(i, 'small', col)).join('')}</div>`;
+      const isLast = k === legs.length - 1;
+      if (isLast) h += stopRow(l.to, 'big last', col);
+      else if (legs[k + 1].type === 'change') h += stopRow(l.to, 'big', col, `<div class="sub">Change here, about ${Math.round(legs[k + 1].mins + LINES[legs[k + 2].line].wait)} min including the wait</div>`).replace('class="stop big"', `class="stop big" style="--c:linear-gradient(${col} 50%, ${lineColour(legs[k + 2].line)} 50%)"`);
+      else h += stopRow(l.to, 'big', col);
+    } else if (l.type === 'walk') {
+      if (k === 0) h += stopRow(l.from, 'big first o', 'transparent');
+      h += `<div class="walkcard"><div class="rail"></div><div class="info">Walk to ${esc(S[l.to].n)}, about ${Math.round(l.mins)} min</div></div>`;
+      if (k === legs.length - 1) h += stopRow(l.to, 'big last', 'transparent');
+    }
+  });
+  h += `</div><button class="btn mapbtn" id="showOnMap">Show route on map</button><p class="note">Estimated from typical journey times, including average waits. Check for delays or closures before you travel.</p>`;
+  // remove duplicate station rows where a ride starts after a change (the change row already shows it)
+  sheetBody.innerHTML = h;
+  sheetBody.querySelectorAll('.stop.big').forEach((el, n, all) => { const nx = all[n + 1]; if (nx && el.textContent.split('Change here')[0] === nx.textContent && el.nextElementSibling === nx) nx.remove(); });
+  sheetBody.querySelectorAll('.toggle').forEach(b => b.onclick = () => { const m = $('mid' + b.dataset.k); const open = m.hidden; m.hidden = !open; b.setAttribute('aria-expanded', open); b.textContent = (open ? 'Hide' : 'Show') + b.textContent.slice(4); });
+  $('showOnMap').onclick = () => peek(true);
+  current = j;
+  openSheet(true);
+  sheetBody.scrollTop = 0;
+  drawRoute(j, false);
+}
+
+function edgePts(a, b) {
+  const k = a < b ? `${a}-${b}` : `${b}-${a}`; const g = GEOM.edges[k];
+  if (!g) return [GEOM.markers[a].slice(0, 2), GEOM.markers[b].slice(0, 2)];
+  return a < b ? g : g.slice().reverse();
+}
+function clearRoute() { routeG.innerHTML = ''; svg.classList.remove('dim'); }
+function drawRoute(j, fitIt) {
+  clearRoute(); svg.classList.add('dim');
+  const all = [];
+  for (const l of j.legs) {
+    if (l.type === 'ride') {
+      let d = '';
+      for (let k = 0; k < l.stops.length - 1; k++) { const p = edgePts(l.stops[k], l.stops[k + 1]); d += (k ? 'L' : 'M') + p.map(q => q.join(' ')).join('L'); p.forEach(q => all.push(q)); }
+      const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); p.setAttribute('stroke', lineColour(l.line)); p.setAttribute('stroke-width', GEOM.lw * 1.6);
+      routeG.appendChild(p);
+      for (const s of l.stops) { const [x, y] = GEOM.markers[s]; const c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', .13); c.setAttribute('stroke-width', .05); routeG.appendChild(c); }
+    } else if (l.type === 'walk') {
+      const a = GEOM.markers[l.from], b = GEOM.markers[l.to];
+      const p = document.createElementNS(NS, 'path'); p.setAttribute('d', `M${a[0]} ${a[1]}L${b[0]} ${b[1]}`); p.setAttribute('stroke', '#93a3a6'); p.setAttribute('stroke-width', GEOM.lw * .8); p.setAttribute('stroke-dasharray', '.15 .15');
+      routeG.appendChild(p); all.push(a, b);
+    }
+  }
+  // labels for the route's stations stay readable
+  if (fitIt && all.length) {
+    const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+    fit([Math.min(...xs) - 1, Math.min(...ys) - 1, Math.max(...xs) + 1, Math.max(...ys) + 1], 24);
+  }
+}
+
+/* ---------- menu, about, toast ---------- */
+const menu = $('menu');
+$('menuBtn').onclick = e => { e.stopPropagation(); menu.classList.toggle('on'); };
+document.addEventListener('click', e => { if (!menu.contains(e.target)) menu.classList.remove('on'); });
+const toastEl = $('toast'); let tt;
+function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => toastEl.classList.remove('on'), 2600); }
+$('openAbout').onclick = () => {
+  menu.classList.remove('on');
+  const key = Object.keys(LINES).map(id => `<span><i style="background:${lineColour(id)}"></i>${esc(lineName(id))}</span>`).join('');
+  $('aboutBody').innerHTML = `
+  <p>A personal map and journey planner for London's Underground, Elizabeth line, Overground, DLR and trams. It works without a signal once it has been opened online.</p>
+  <h3>Lines</h3><div class="k">${key}</div>
+  <h3>How times are worked out</h3>
+  <p>Journey times are estimates from the distance between stations and typical train speeds, plus an average wait for each train and a few minutes for each change. Real times vary, and the app doesn't know about delays, closures or engineering works.</p>
+  <h3>The map</h3>
+  <p>This is an original diagram drawn from station positions, not the official map. You can keep your own downloaded copy of the official map under "Your downloaded map" in the menu.</p>
+  <h3>Data</h3>
+  <p>${esc(NET.credits)} Network data dated ${esc(NET.generated)}.</p>`;
+  $('aboutOv').classList.add('on');
+};
+$('aboutClose').onclick = () => $('aboutOv').classList.remove('on');
+
+/* ---------- reference map (user's own file, stored on device) ---------- */
+const DB = 'underway', STORE = 'files';
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open(DB, 1); r.onupgradeneeded = () => r.result.createObjectStore(STORE); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const idbGet = async k => { const db = await idb(); return new Promise((res, rej) => { const r = db.transaction(STORE).objectStore(STORE).get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); };
+const idbPut = async (k, v) => { const db = await idb(); return new Promise((res, rej) => { const t = db.transaction(STORE, 'readwrite'); t.objectStore(STORE).put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); };
+const refWrap = $('refWrap');
+let refView = { x: 0, y: 0, k: 1 }, refEl = null;
+const refApply = () => { if (refEl) refEl.style.transform = `translate(${refView.x}px,${refView.y}px) scale(${refView.k})`; };
+function refEmpty() {
+  $('refReplace').style.display = 'none';
+  refWrap.innerHTML = `<div class="empty"><h3>Add your map</h3><p>Choose the map PDF or image you downloaded. It's kept on this phone only, so you can open it offline.</p><button class="btn primary" id="refPick" style="display:inline-block;padding:12px 22px">Choose file</button></div>`;
+  $('refPick').onclick = () => $('refFile').click();
+}
+async function loadPdfJs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'pdf.min.js'; s.onload = res; s.onerror = () => rej(new Error('pdf')); document.head.appendChild(s); });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+async function refShow(rec) {
+  refWrap.innerHTML = '<div class="empty"><p>Opening your map…</p></div>';
+  $('refReplace').style.display = '';
+  try {
+    if (rec.type === 'application/pdf') {
+      const lib = await loadPdfJs();
+      const doc = await lib.getDocument({ data: await rec.blob.arrayBuffer() }).promise;
+      const page = await doc.getPage(1);
+      const base = page.getViewport({ scale: 1 });
+      const scale = Math.min(4, 4200 / Math.max(base.width, base.height));
+      const vpp = page.getViewport({ scale });
+      const c = document.createElement('canvas'); c.width = vpp.width; c.height = vpp.height;
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vpp }).promise;
+      refEl = c;
+    } else {
+      const img = new Image(); img.src = URL.createObjectURL(rec.blob); await img.decode(); refEl = img;
+    }
+    refWrap.innerHTML = ''; refWrap.appendChild(refEl);
+    const w = refEl.width || refEl.naturalWidth, h = refEl.height || refEl.naturalHeight;
+    const k = Math.min(refWrap.clientWidth / w, refWrap.clientHeight / h);
+    refView = { k, x: (refWrap.clientWidth - w * k) / 2, y: (refWrap.clientHeight - h * k) / 2 }; refApply();
+  } catch (err) {
+    refWrap.innerHTML = `<div class="empty"><h3>Couldn't open this file</h3><p>Try a different PDF, or a screenshot or image of the map.</p><button class="btn primary" id="refPick" style="display:inline-block;padding:12px 22px">Choose another file</button></div>`;
+    $('refPick').onclick = () => $('refFile').click();
+  }
+}
+$('openRef').onclick = async () => {
+  menu.classList.remove('on'); $('ref').classList.add('on');
+  let rec = null; try { rec = await idbGet('ref'); } catch {}
+  if (rec) refShow(rec); else refEmpty();
+};
+$('refClose').onclick = () => $('ref').classList.remove('on');
+$('refReplace').onclick = () => $('refFile').click();
+$('refFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rec = { blob: f, type: f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'image/*'), name: f.name };
+  try { await idbPut('ref', rec); toast('Map saved on this phone'); } catch { toast("Couldn't save the file on this phone"); }
+  refShow(rec); e.target.value = '';
+};
+{ // pan & pinch for reference view
+  const p = new Map(); let pin = null;
+  refWrap.addEventListener('pointerdown', e => { refWrap.setPointerCapture(e.pointerId); p.set(e.pointerId, [e.clientX, e.clientY]); pin = null; });
+  refWrap.addEventListener('pointermove', e => {
+    if (!p.has(e.pointerId) || !refEl) return; const pr = p.get(e.pointerId); p.set(e.pointerId, [e.clientX, e.clientY]);
+    const r = refWrap.getBoundingClientRect();
+    if (p.size === 1) { refView.x += e.clientX - pr[0]; refView.y += e.clientY - pr[1]; }
+    else if (p.size === 2) { const [a, b] = [...p.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); const c = [(a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top];
+      if (pin) { const f = d / pin.d; refView.x = c[0] - (c[0] - refView.x) * f + (c[0] - pin.c[0]); refView.y = c[1] - (c[1] - refView.y) * f + (c[1] - pin.c[1]); refView.k *= f; }
+      pin = { d, c }; }
+    refApply();
+  });
+  const end = e => { p.delete(e.pointerId); pin = null; };
+  refWrap.addEventListener('pointerup', end); refWrap.addEventListener('pointercancel', end);
+  refWrap.addEventListener('wheel', e => { e.preventDefault(); if (!refEl) return; const r = refWrap.getBoundingClientRect(); const c = [e.clientX - r.left, e.clientY - r.top]; const f = Math.exp(-e.deltaY * .0016); refView.x = c[0] - (c[0] - refView.x) * f; refView.y = c[1] - (c[1] - refView.y) * f; refView.k *= f; refApply(); }, { passive: false });
+}
+
+/* ---------- start ---------- */
+fit([0, 0, MW, MH], 10, false);
+// start a little zoomed into central London
+{ const c = GEOM.markers[S.findIndex(s => s.n === 'Holborn')]; const k = 7.2 / FS; if (c) view = { k, x: innerWidth / 2 - c[0] * k, y: innerHeight * .56 - c[1] * k }; apply(); }
+window.__app = { setOrigin, setDest, R, S, get view() { return view; }, fit };
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
