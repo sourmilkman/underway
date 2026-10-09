@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md', 'build/**']
+    paths-ignore: ['README.md', 'build/*.py', 'build/data/**']
   workflow_dispatch:
 
 permissions:
@@ -13,18 +13,16 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - uses: android-actions/setup-android@v3
 
       - name: Collect web app
         run: |
@@ -41,14 +39,7 @@ jobs:
 
       - name: App icon
         run: |
-          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            dir=android/app/src/main/res/mipmap-${d%%:*}
-            size=${d##*:}
-            mkdir -p $dir
-            convert icon-512.png -resize ${size}x${size} $dir/ic_launcher.png
-            cp $dir/ic_launcher.png $dir/ic_launcher_round.png
-            convert icon-512.png -resize ${size}x${size} $dir/ic_launcher_foreground.png
-          done
+          cp -r build/android-icons/* android/app/src/main/res/
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
 
       - name: Build
