@@ -19,7 +19,12 @@ python3 assemble.py        # writes index.html and sw.js to the repo root
 ```
 Needs Python 3 with numpy, scipy and shapely.
 
+## Android app
+GitHub Actions builds `Underway.apk` on every push, tests it on an emulator with no signal and with a weak signal, and publishes it under Releases.
+The APK is signed with `build/android/underway.keystore` (a debug-type key, password `android`) so each update installs over the previous one. It's for personal sideloading only.
+
 ## Data and accuracy
 - Tube sequences: TfL Unified API (September 2026).
 - Other modes and interchanges: O. O'Brien / OpenStreetMap contributors (CC-BY-NC, ODbL). Personal, non-commercial use only.
+- Font: Hanken Grotesk (SIL Open Font License), bundled in the app.
 - Journey times are estimates from distance, typical line speeds and average waits. No live delay information.

@@ -5,6 +5,9 @@ D=B; OUT=_os.path.dirname(B.rstrip('/')) + '/'; os.makedirs(OUT, exist_ok=True)
 net=open(D+'network.json').read(); geom=open(D+'geom.json').read(); router=open(D+'router.js').read()
 router=router.replace("if (typeof module !== 'undefined') module.exports = Router;","")
 html=open(D+'app.template.html').read()
+import base64
+fonts=''.join("@font-face{font-family:'Hanken Grotesk';font-style:normal;font-display:swap;font-weight:%d;src:url(data:font/woff2;base64,%s) format('woff2')}\n" % (w, base64.b64encode(open(D+'vendor/fonts/hanken-grotesk-latin-%d-normal.woff2' % w,'rb').read()).decode()) for w in (400,500,600,700))
+html=html.replace('/*FONTS*/', fonts)
 html=html.replace('/*NET*/null', net).replace('/*GEOM*/null', geom).replace('/*ROUTER*/', router)
 open(OUT+'index.html','w').write(html)
 ver=hashlib.sha1(html.encode()).hexdigest()[:10]

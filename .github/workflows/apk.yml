@@ -27,7 +27,7 @@ jobs:
       - name: Collect web app
         run: |
           mkdir -p www
-          cp index.html sw.js manifest.webmanifest icon-192.png icon-512.png pdf.min.js pdf.worker.min.js www/
+          cp index.html manifest.webmanifest icon-192.png icon-512.png pdf.min.js pdf.worker.min.js www/
 
       - name: Wrap with Capacitor
         run: |
@@ -37,23 +37,52 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: App icon
+      - name: App icon and version number
         run: |
           cp -r build/android-icons/* android/app/src/main/res/
           rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
 
-      - name: Build
+      - name: Build (signed with the project's fixed key, so updates install over the top)
         working-directory: android
         run: |
+          mkdir -p ~/.android
+          cp ../build/android/underway.keystore ~/.android/debug.keystore
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../Underway.apk
+
+      - name: Previous APK, for comparison
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download apk-2 -p Underway.apk -O old.apk || true
+
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Test on an Android emulator with no signal and a weak signal
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash build/android/emulator-test.sh
 
       - name: Publish as a release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-${{ github.run_number }}
           name: Underway APK ${{ github.run_number }}
-          body: Download Underway.apk on your phone and open it to install. You may need to allow installs from your browser.
-          files: Underway.apk
+          body: |
+            Download Underway.apk on your phone and open it to install.
+            Works with no signal: everything the app needs is inside it.
+            From this version on, updates install over the top without uninstalling.
+          files: |
+            Underway.apk
+            shots/*.png
           make_latest: true

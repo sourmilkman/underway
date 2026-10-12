@@ -8,10 +8,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/*FONTS*/
 :root{
   --ink:#0e1619; --panel:#16232a; --panel-2:#1d2d34; --rule:#2b3d44;
   --porcelain:#ece6d6; --mist:#93a3a6; --brass:#c8a15a; --brass-deep:#9b7a3c;
@@ -647,7 +645,18 @@ fit([0, 0, MW, MH], 10, false);
 // start a little zoomed into central London
 { const c = GEOM.markers[S.findIndex(s => s.n === 'Holborn')]; const k = 7.2 / FS; if (c) view = { k, x: innerWidth / 2 - c[0] * k, y: innerHeight * .56 - c[1] * k }; apply(); }
 window.__app = { setOrigin, setDest, R, S, get view() { return view; }, fit };
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Offline helper: only for the web version. The Android app already has every file inside it,
+// so there it is switched off (and any copy left over from an earlier version is removed).
+const inAndroidApp = !!window.Capacitor || (location.protocol === 'https:' && location.hostname === 'localhost');
+if ('serviceWorker' in navigator) {
+  if (inAndroidApp) {
+    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    if (window.caches) caches.keys().then(ks => ks.forEach(k => caches.delete(k))).catch(() => {});
+  } else if (location.protocol.startsWith('http')) {
+    const firstTime = !navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => { if (firstTime) toast('Saved for offline use'); }).catch(() => {});
+  }
+}
 })();
 </script>
 </body>
