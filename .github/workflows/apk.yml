@@ -44,19 +44,42 @@ jobs:
           sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
           grep -E "versionCode|versionName" android/app/build.gradle
 
-      - name: Build (signed with the project's fixed key, so updates install over the top)
+      - name: Use the project's fixed signing key, so updates install over the top
+        run: |
+          python3 - <<'PY'
+          p = 'android/app/build.gradle'
+          s = open(p).read()
+          block = '''android {
+              signingConfigs {
+                  debug {
+                      storeFile file('../../build/android/underway.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+          '''
+          assert s.count('android {') >= 1
+          s = s.replace('android {', block, 1)
+          open(p, 'w').write(s)
+          PY
+          head -20 android/app/build.gradle
+
+      - name: Build
         working-directory: android
         run: |
-          mkdir -p ~/.android
-          cp ../build/android/underway.keystore ~/.android/debug.keystore
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../Underway.apk
+
+      - name: Check the APK is signed with the project key
+        run: keytool -printcert -jarfile Underway.apk | tee /dev/stderr | grep -q "CN=Underway"
 
       - name: Previous APK, for comparison
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release download apk-2 -p Underway.apk -O old.apk || true
+          # apk-2 is the version from 9 October, before the no-signal fix
 
       - name: Enable emulator acceleration
         run: |
