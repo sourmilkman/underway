@@ -1,5 +1,8 @@
 name: Emulator check (expired cache, weak signal)
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/cold-check.yml', 'build/android/cold-check.sh']
 permissions:
   contents: write
 jobs:

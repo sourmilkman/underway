@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [main]
-    paths-ignore: ['README.md', 'build/*.py', 'build/data/**']
+    paths-ignore: ['README.md', 'build/*.py', 'build/data/**', '.github/workflows/cold-check.yml', 'build/android/cold-check.sh']
   workflow_dispatch:
 
 permissions:
