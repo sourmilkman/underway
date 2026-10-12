@@ -1,0 +1,34 @@
+name: Emulator check (expired cache, weak signal)
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Get old and new APKs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download apk-2 -p Underway.apk -O old.apk
+          gh release download apk-3 -p Underway.apk -O new.apk
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash build/android/cold-check.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-shots
+          name: Test screenshots (not an app release)
+          prerelease: true
+          make_latest: false
+          files: shots/*.png
